@@ -93,7 +93,9 @@ L.VectorGrid = L.GridLayer.extend({
 				}
 
 			}
-			renderer.addTo(this._map);
+			if (this._map != null) {
+				renderer.addTo(this._map);
+			}
 			L.Util.requestAnimFrame(done.bind(coords, null, null));
 		}.bind(this));
 
