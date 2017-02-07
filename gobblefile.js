@@ -4,49 +4,49 @@ var gobble = require('gobble');
 var src = gobble('src');
 
 
-// Run rollup on the web worker code, in order to include GeoJSON-vt and TopoJSON into it.
-var concatenatedWebWorker = src.transform('rollup', {
-	entry: 'slicerWebWorker.js',
-	dest: 'slicerWebWorker.js.worker',
-	format: 'cjs',
-	sourceMap: true,
-	plugins: [
-		require('rollup-plugin-buble')({
-			include: '**/**.js'
-		}),
-		require('rollup-plugin-node-resolve')({
-			jsnext: false,
-			main: true
-		}),
-		require('rollup-plugin-commonjs')(),
-// 		require('rollup-plugin-file-as-blob')({
-// 			include: '**/**.png'
-// 		}),
-	]
-});
-
-var uglifiedWebWorker = src.transform('rollup', {
-	entry: 'slicerWebWorker.js',
-	dest: 'slicerWebWorker.js.worker',
-	format: 'cjs',
-	sourceMap: false,
-	plugins: [
-		require('rollup-plugin-buble')({
-			include: '**/**.js'
-		}),
-		require('rollup-plugin-node-resolve')({
-			jsnext: false,
-			main: true
-		}),
-		require('rollup-plugin-commonjs')(),
-		require('rollup-plugin-uglify')()
-	]
-});
-
-// Get the rolled-up worker code back next to the same directory as the main code
-var src2         = gobble([src, concatenatedWebWorker]);
-var src2uglified = gobble([src, uglifiedWebWorker]);
-
+//// Run rollup on the web worker code, in order to include GeoJSON-vt and TopoJSON into it.
+//var concatenatedWebWorker = src.transform('rollup', {
+//	entry: 'slicerWebWorker.js',
+//	dest: 'slicerWebWorker.js.worker',
+//	format: 'cjs',
+//	sourceMap: true,
+//	plugins: [
+//		require('rollup-plugin-buble')({
+//			include: '**/**.js'
+//		}),
+//		require('rollup-plugin-node-resolve')({
+//			jsnext: false,
+//			main: true
+//		}),
+//		require('rollup-plugin-commonjs')(),
+//// 		require('rollup-plugin-file-as-blob')({
+//// 			include: '**/**.png'
+//// 		}),
+//	]
+//});
+//
+//var uglifiedWebWorker = src.transform('rollup', {
+//	entry: 'slicerWebWorker.js',
+//	dest: 'slicerWebWorker.js.worker',
+//	format: 'cjs',
+//	sourceMap: false,
+//	plugins: [
+//		require('rollup-plugin-buble')({
+//			include: '**/**.js'
+//		}),
+//		require('rollup-plugin-node-resolve')({
+//			jsnext: false,
+//			main: true
+//		}),
+//		require('rollup-plugin-commonjs')(),
+//		require('rollup-plugin-uglify')()
+//	]
+//});
+//
+//// Get the rolled-up worker code back next to the same directory as the main code
+//var src2         = gobble([src, concatenatedWebWorker]);
+//var src2uglified = gobble([src, uglifiedWebWorker]);
+//
 
 // We'll run rollup four times, with slightly different options and using different
 // source files (uglified worker or not). But the plugins stay the same.
@@ -69,7 +69,7 @@ var rollupPluginOptions = [
 var rollupUglyPluginOptions = rollupPluginOptions.concat([require('rollup-plugin-uglify')()]);
 
 // Roll up the main code, merging the web worker code as a blob URL.
-var builtCode = src2.transform('rollup', {
+var builtCode = src.transform('rollup', {
 	entry: 'bundle.js',
 	dest: 'Leaflet.VectorGrid.js',
 	format: 'cjs',
@@ -79,7 +79,7 @@ var builtCode = src2.transform('rollup', {
 
 
 // Roll up the main code plus the optional bundled deps, merging the web worker code as a blob URL.
-var bundledCode = src2.transform('rollup', {
+var bundledCode = src.transform('rollup', {
 	entry: 'bundle-extra.js',
 	dest: 'Leaflet.VectorGrid.bundled.js',
 	format: 'iife',
@@ -92,7 +92,7 @@ var bundledCode = src2.transform('rollup', {
 });
 
 
-var uglifiedCode = src2uglified.transform('rollup', {
+var uglifiedCode = src.transform('rollup', {
 	entry: 'bundle.js',
 	dest: 'Leaflet.VectorGrid.min.js',
 	format: 'cjs',
@@ -101,7 +101,7 @@ var uglifiedCode = src2uglified.transform('rollup', {
 });
 
 
-var uglifiedBundledCode = src2uglified.transform('rollup', {
+var uglifiedBundledCode = src.transform('rollup', {
 	entry: 'bundle-extra.js',
 	dest: 'Leaflet.VectorGrid.bundled.min.js',
 	format: 'cjs',
