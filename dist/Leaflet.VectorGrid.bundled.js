@@ -1200,11 +1200,13 @@ L.SVG.Tile = L.SVG.extend({
 	onAdd: L.Util.falseFn,
 
 	addTo: function(map) {
+		var this$1 = this;
+
 		this._map = map;
 		if (this.options.interactive) {
 			for (var i in this._layers) {
-				var layer = this._layers[i];
-				this._map._targets[L.stamp(layer._path)] = layer;
+				var layer = this$1._layers[i];
+				this$1._map._targets[L.stamp(layer._path)] = layer;
 			}
 		}
 	},
@@ -1277,13 +1279,15 @@ L.VectorGrid = L.GridLayer.extend({
 		}
 
 		vectorTilePromise.then( function renderTile(vectorTile) {
+			var this$1 = this;
+
 			for (var layerName in vectorTile.layers) {
 				var layer = vectorTile.layers[layerName];
 
 				/// NOTE: THIS ASSUMES SQUARE TILES!!!!!1!
-				var pxPerExtent = this.getTileSize().x / layer.extent;
+				var pxPerExtent = this$1.getTileSize().x / layer.extent;
 
-				var layerStyle = this.options.vectorTileLayerStyles[ layerName ] ||
+				var layerStyle = this$1.options.vectorTileLayerStyles[ layerName ] ||
 				L.Path.prototype.options;
 
 				for (var i in layer.features) {
@@ -1292,8 +1296,8 @@ L.VectorGrid = L.GridLayer.extend({
 
 					var styleOptions = layerStyle;
 					if (storeFeatures) {
-						id = this.options.getFeatureId(feat);
-						var styleOverride = this._overriddenStyles[id];
+						id = this$1.options.getFeatureId(feat);
+						var styleOverride = this$1._overriddenStyles[id];
 						if (styleOverride) {
 							if (styleOverride[layerName]) {
 								styleOptions = styleOverride[layerName];
@@ -1315,7 +1319,7 @@ L.VectorGrid = L.GridLayer.extend({
 						continue;
 					}
 
-					var featureLayer = this._createLayer(feat, pxPerExtent);
+					var featureLayer = this$1._createLayer(feat, pxPerExtent);
 
 					for (var j in styleOptions) {
 						var style = L.extend({}, L.Path.prototype.options, styleOptions[j]);
@@ -1323,7 +1327,7 @@ L.VectorGrid = L.GridLayer.extend({
 						renderer._addPath(featureLayer);
 					}
 
-					if (this.options.interactive) {
+					if (this$1.options.interactive) {
 						featureLayer.makeInteractive();
 					}
 
@@ -1346,14 +1350,16 @@ L.VectorGrid = L.GridLayer.extend({
 	},
 
 	setFeatureStyle: function(id, layerStyle) {
+		var this$1 = this;
+
 		this._overriddenStyles[id] = {};
 
 		for (var tileKey in this._vectorTiles) {
-			var tile = this._vectorTiles[tileKey];
+			var tile = this$1._vectorTiles[tileKey];
 			var features = tile._features;
 			var data = features[id];
 			if (data) {
-				this._overriddenStyles[id] = layerStyle;
+				this$1._overriddenStyles[id] = layerStyle;
 				var feat = data.feature;
 
 				var styleOptions = layerStyle;
@@ -1365,28 +1371,30 @@ L.VectorGrid = L.GridLayer.extend({
 					styleOptions(feat.properties, tile.getCoord().z) :
 					styleOptions;
 
-				this._updateStyles(feat, tile, styleOptions);
+				this$1._updateStyles(feat, tile, styleOptions);
 			} else {
-				this._overriddenStyles[id] = layerStyle;
+				this$1._overriddenStyles[id] = layerStyle;
 			}
 		}
 	},
 
 	resetFeatureStyle: function(id) {
+		var this$1 = this;
+
 		delete this._overriddenStyles[id];
 
 		for (var tileKey in this._vectorTiles) {
-			var tile = this._vectorTiles[tileKey];
+			var tile = this$1._vectorTiles[tileKey];
 			var features = tile._features;
 			var data = features[id];
 			if (data) {
 				var feat = data.feature;
-				var layerStyle = this.options.vectorTileLayerStyles[ data.layerName ] ||
+				var layerStyle = this$1.options.vectorTileLayerStyles[ data.layerName ] ||
 				L.Path.prototype.options;
 				var styleOptions = (layerStyle instanceof Function) ?
 				layerStyle(feat.properties, tile.getCoord().z) :
 				layerStyle;
-				this._updateStyles(feat, tile, styleOptions);
+				this$1._updateStyles(feat, tile, styleOptions);
 			}
 		}
 	},
@@ -1546,6 +1554,8 @@ var PointLayer = L.CircleMarker.extend({
 
 var polyBase = {
 	_makeFeatureParts: function(feat, pxPerExtent) {
+		var this$1 = this;
+
 		var rings = feat.geometry;
 		var coord;
 
@@ -1563,7 +1573,7 @@ var polyBase = {
 					part.push(L.point(coord[0] * pxPerExtent, coord[1] * pxPerExtent));
 				}
 			}
-			this._parts.push(part);
+			this$1._parts.push(part);
 		}
 	},
 
@@ -1695,71 +1705,1184 @@ L.vectorGrid.protobuf = function (url, options) {
 	return new L.VectorGrid.Protobuf(url, options);
 };
 
-var workerCode = __$strToBlobUri("'use strict';\n\nvar simplify_1 = simplify$1;\n\n// calculate simplification data using optimized Douglas-Peucker algorithm\n\nfunction simplify$1(points, tolerance) {\n\n    var sqTolerance = tolerance * tolerance,\n        len = points.length,\n        first = 0,\n        last = len - 1,\n        stack = [],\n        i, maxSqDist, sqDist, index;\n\n    // always retain the endpoints (1 is the max value)\n    points[first][2] = 1;\n    points[last][2] = 1;\n\n    // avoid recursion by using a stack\n    while (last) {\n\n        maxSqDist = 0;\n\n        for (i = first + 1; i < last; i++) {\n            sqDist = getSqSegDist(points[i], points[first], points[last]);\n\n            if (sqDist > maxSqDist) {\n                index = i;\n                maxSqDist = sqDist;\n            }\n        }\n\n        if (maxSqDist > sqTolerance) {\n            points[index][2] = maxSqDist; // save the point importance in squared pixels as a z coordinate\n            stack.push(first);\n            stack.push(index);\n            first = index;\n\n        } else {\n            last = stack.pop();\n            first = stack.pop();\n        }\n    }\n}\n\n// square distance from a point to a segment\nfunction getSqSegDist(p, a, b) {\n\n    var x = a[0], y = a[1],\n        bx = b[0], by = b[1],\n        px = p[0], py = p[1],\n        dx = bx - x,\n        dy = by - y;\n\n    if (dx !== 0 || dy !== 0) {\n\n        var t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);\n\n        if (t > 1) {\n            x = bx;\n            y = by;\n\n        } else if (t > 0) {\n            x += dx * t;\n            y += dy * t;\n        }\n    }\n\n    dx = px - x;\n    dy = py - y;\n\n    return dx * dx + dy * dy;\n}\n\nvar feature = createFeature$1;\n\nfunction createFeature$1(tags, type, geom, id) {\n    var feature = {\n        id: id || null,\n        type: type,\n        geometry: geom,\n        tags: tags || null,\n        min: [Infinity, Infinity], // initial bbox values\n        max: [-Infinity, -Infinity]\n    };\n    calcBBox(feature);\n    return feature;\n}\n\n// calculate the feature bounding box for faster clipping later\nfunction calcBBox(feature) {\n    var geometry = feature.geometry,\n        min = feature.min,\n        max = feature.max;\n\n    if (feature.type === 1) {\n        calcRingBBox(min, max, geometry);\n    } else {\n        for (var i = 0; i < geometry.length; i++) {\n            calcRingBBox(min, max, geometry[i]);\n        }\n    }\n\n    return feature;\n}\n\nfunction calcRingBBox(min, max, points) {\n    for (var i = 0, p; i < points.length; i++) {\n        p = points[i];\n        min[0] = Math.min(p[0], min[0]);\n        max[0] = Math.max(p[0], max[0]);\n        min[1] = Math.min(p[1], min[1]);\n        max[1] = Math.max(p[1], max[1]);\n    }\n}\n\nvar convert_1 = convert$1;\n\nvar simplify = simplify_1;\nvar createFeature = feature;\n\n// converts GeoJSON feature into an intermediate projected JSON vector format with simplification data\n\nfunction convert$1(data, tolerance) {\n    var features = [];\n\n    if (data.type === 'FeatureCollection') {\n        for (var i = 0; i < data.features.length; i++) {\n            convertFeature(features, data.features[i], tolerance);\n        }\n    } else if (data.type === 'Feature') {\n        convertFeature(features, data, tolerance);\n\n    } else {\n        // single geometry or a geometry collection\n        convertFeature(features, {geometry: data}, tolerance);\n    }\n    return features;\n}\n\nfunction convertFeature(features, feature$$1, tolerance) {\n    if (feature$$1.geometry === null) {\n        // ignore features with null geometry\n        return;\n    }\n\n    var geom = feature$$1.geometry,\n        type = geom.type,\n        coords = geom.coordinates,\n        tags = feature$$1.properties,\n        id = feature$$1.id,\n        i, j, rings, projectedRing;\n\n    if (type === 'Point') {\n        features.push(createFeature(tags, 1, [projectPoint(coords)], id));\n\n    } else if (type === 'MultiPoint') {\n        features.push(createFeature(tags, 1, project(coords), id));\n\n    } else if (type === 'LineString') {\n        features.push(createFeature(tags, 2, [project(coords, tolerance)], id));\n\n    } else if (type === 'MultiLineString' || type === 'Polygon') {\n        rings = [];\n        for (i = 0; i < coords.length; i++) {\n            projectedRing = project(coords[i], tolerance);\n            if (type === 'Polygon') { projectedRing.outer = (i === 0); }\n            rings.push(projectedRing);\n        }\n        features.push(createFeature(tags, type === 'Polygon' ? 3 : 2, rings, id));\n\n    } else if (type === 'MultiPolygon') {\n        rings = [];\n        for (i = 0; i < coords.length; i++) {\n            for (j = 0; j < coords[i].length; j++) {\n                projectedRing = project(coords[i][j], tolerance);\n                projectedRing.outer = (j === 0);\n                rings.push(projectedRing);\n            }\n        }\n        features.push(createFeature(tags, 3, rings, id));\n\n    } else if (type === 'GeometryCollection') {\n        for (i = 0; i < geom.geometries.length; i++) {\n            convertFeature(features, {\n                geometry: geom.geometries[i],\n                properties: tags\n            }, tolerance);\n        }\n\n    } else {\n        throw new Error('Input data is not a valid GeoJSON object.');\n    }\n}\n\nfunction project(lonlats, tolerance) {\n    var projected = [];\n    for (var i = 0; i < lonlats.length; i++) {\n        projected.push(projectPoint(lonlats[i]));\n    }\n    if (tolerance) {\n        simplify(projected, tolerance);\n        calcSize(projected);\n    }\n    return projected;\n}\n\nfunction projectPoint(p) {\n    var sin = Math.sin(p[1] * Math.PI / 180),\n        x = (p[0] / 360 + 0.5),\n        y = (0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI);\n\n    y = y < 0 ? 0 :\n        y > 1 ? 1 : y;\n\n    return [x, y, 0];\n}\n\n// calculate area and length of the poly\nfunction calcSize(points) {\n    var area = 0,\n        dist = 0;\n\n    for (var i = 0, a, b; i < points.length - 1; i++) {\n        a = b || points[i];\n        b = points[i + 1];\n\n        area += a[0] * b[1] - b[0] * a[1];\n\n        // use Manhattan distance instead of Euclidian one to avoid expensive square root computation\n        dist += Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);\n    }\n    points.area = Math.abs(area / 2);\n    points.dist = dist;\n}\n\nvar tile = transformTile;\nvar point = transformPoint;\n\n// Transforms the coordinates of each feature in the given tile from\n// mercator-projected space into (extent x extent) tile space.\nfunction transformTile(tile, extent) {\n    if (tile.transformed) { return tile; }\n\n    var z2 = tile.z2,\n        tx = tile.x,\n        ty = tile.y,\n        i, j, k;\n\n    for (i = 0; i < tile.features.length; i++) {\n        var feature = tile.features[i],\n            geom = feature.geometry,\n            type = feature.type;\n\n        if (type === 1) {\n            for (j = 0; j < geom.length; j++) { geom[j] = transformPoint(geom[j], extent, z2, tx, ty); }\n\n        } else {\n            for (j = 0; j < geom.length; j++) {\n                var ring = geom[j];\n                for (k = 0; k < ring.length; k++) { ring[k] = transformPoint(ring[k], extent, z2, tx, ty); }\n            }\n        }\n    }\n\n    tile.transformed = true;\n\n    return tile;\n}\n\nfunction transformPoint(p, extent, z2, tx, ty) {\n    var x = Math.round(extent * (p[0] * z2 - tx)),\n        y = Math.round(extent * (p[1] * z2 - ty));\n    return [x, y];\n}\n\nvar transform$1 = {\n	tile: tile,\n	point: point\n};\n\nvar clip_1 = clip$1;\n\nvar createFeature$2 = feature;\n\n/* clip features between two axis-parallel lines:\n *     |        |\n *  ___|___     |     /\n * /   |   \____|____/\n *     |        |\n */\n\nfunction clip$1(features, scale, k1, k2, axis, intersect, minAll, maxAll) {\n\n    k1 /= scale;\n    k2 /= scale;\n\n    if (minAll >= k1 && maxAll <= k2) { return features; } // trivial accept\n    else if (minAll > k2 || maxAll < k1) { return null; } // trivial reject\n\n    var clipped = [];\n\n    for (var i = 0; i < features.length; i++) {\n\n        var feature$$1 = features[i],\n            geometry = feature$$1.geometry,\n            type = feature$$1.type,\n            min, max;\n\n        min = feature$$1.min[axis];\n        max = feature$$1.max[axis];\n\n        if (min >= k1 && max <= k2) { // trivial accept\n            clipped.push(feature$$1);\n            continue;\n        } else if (min > k2 || max < k1) { continue; } // trivial reject\n\n        var slices = type === 1 ?\n                clipPoints(geometry, k1, k2, axis) :\n                clipGeometry(geometry, k1, k2, axis, intersect, type === 3);\n\n        if (slices.length) {\n            // if a feature got clipped, it will likely get clipped on the next zoom level as well,\n            // so there's no need to recalculate bboxes\n            clipped.push(createFeature$2(feature$$1.tags, type, slices, feature$$1.id));\n        }\n    }\n\n    return clipped.length ? clipped : null;\n}\n\nfunction clipPoints(geometry, k1, k2, axis) {\n    var slice = [];\n\n    for (var i = 0; i < geometry.length; i++) {\n        var a = geometry[i],\n            ak = a[axis];\n\n        if (ak >= k1 && ak <= k2) { slice.push(a); }\n    }\n    return slice;\n}\n\nfunction clipGeometry(geometry, k1, k2, axis, intersect, closed) {\n\n    var slices = [];\n\n    for (var i = 0; i < geometry.length; i++) {\n\n        var ak = 0,\n            bk = 0,\n            b = null,\n            points = geometry[i],\n            area = points.area,\n            dist = points.dist,\n            outer = points.outer,\n            len = points.length,\n            a, j, last;\n\n        var slice = [];\n\n        for (j = 0; j < len - 1; j++) {\n            a = b || points[j];\n            b = points[j + 1];\n            ak = bk || a[axis];\n            bk = b[axis];\n\n            if (ak < k1) {\n\n                if ((bk > k2)) { // ---|-----|-->\n                    slice.push(intersect(a, b, k1), intersect(a, b, k2));\n                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }\n\n                } else if (bk >= k1) { slice.push(intersect(a, b, k1)); } // ---|-->  |\n\n            } else if (ak > k2) {\n\n                if ((bk < k1)) { // <--|-----|---\n                    slice.push(intersect(a, b, k2), intersect(a, b, k1));\n                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }\n\n                } else if (bk <= k2) { slice.push(intersect(a, b, k2)); } // |  <--|---\n\n            } else {\n\n                slice.push(a);\n\n                if (bk < k1) { // <--|---  |\n                    slice.push(intersect(a, b, k1));\n                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }\n\n                } else if (bk > k2) { // |  ---|-->\n                    slice.push(intersect(a, b, k2));\n                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }\n                }\n                // | --> |\n            }\n        }\n\n        // add the last point\n        a = points[len - 1];\n        ak = a[axis];\n        if (ak >= k1 && ak <= k2) { slice.push(a); }\n\n        // close the polygon if its endpoints are not the same after clipping\n\n        last = slice[slice.length - 1];\n        if (closed && last && (slice[0][0] !== last[0] || slice[0][1] !== last[1])) { slice.push(slice[0]); }\n\n        // add the final slice\n        newSlice(slices, slice, area, dist, outer);\n    }\n\n    return slices;\n}\n\nfunction newSlice(slices, slice, area, dist, outer) {\n    if (slice.length) {\n        // we don't recalculate the area/length of the unclipped geometry because the case where it goes\n        // below the visibility threshold as a result of clipping is rare, so we avoid doing unnecessary work\n        slice.area = area;\n        slice.dist = dist;\n        if (outer !== undefined) { slice.outer = outer; }\n\n        slices.push(slice);\n    }\n    return [];\n}\n\nvar clip$2 = clip_1;\nvar createFeature$3 = feature;\n\nvar wrap_1 = wrap$1;\n\nfunction wrap$1(features, buffer, intersectX) {\n    var merged = features,\n        left  = clip$2(features, 1, -1 - buffer, buffer,     0, intersectX, -1, 2), // left world copy\n        right = clip$2(features, 1,  1 - buffer, 2 + buffer, 0, intersectX, -1, 2); // right world copy\n\n    if (left || right) {\n        merged = clip$2(features, 1, -buffer, 1 + buffer, 0, intersectX, -1, 2) || []; // center world copy\n\n        if (left) { merged = shiftFeatureCoords(left, 1).concat(merged); } // merge left into center\n        if (right) { merged = merged.concat(shiftFeatureCoords(right, -1)); } // merge right into center\n    }\n\n    return merged;\n}\n\nfunction shiftFeatureCoords(features, offset) {\n    var newFeatures = [];\n\n    for (var i = 0; i < features.length; i++) {\n        var feature$$1 = features[i],\n            type = feature$$1.type;\n\n        var newGeometry;\n\n        if (type === 1) {\n            newGeometry = shiftCoords(feature$$1.geometry, offset);\n        } else {\n            newGeometry = [];\n            for (var j = 0; j < feature$$1.geometry.length; j++) {\n                newGeometry.push(shiftCoords(feature$$1.geometry[j], offset));\n            }\n        }\n\n        newFeatures.push(createFeature$3(feature$$1.tags, type, newGeometry, feature$$1.id));\n    }\n\n    return newFeatures;\n}\n\nfunction shiftCoords(points, offset) {\n    var newPoints = [];\n    newPoints.area = points.area;\n    newPoints.dist = points.dist;\n\n    for (var i = 0; i < points.length; i++) {\n        newPoints.push([points[i][0] + offset, points[i][1], points[i][2]]);\n    }\n    return newPoints;\n}\n\nvar tile$1 = createTile$1;\n\nfunction createTile$1(features, z2, tx, ty, tolerance, noSimplify) {\n    var tile = {\n        features: [],\n        numPoints: 0,\n        numSimplified: 0,\n        numFeatures: 0,\n        source: null,\n        x: tx,\n        y: ty,\n        z2: z2,\n        transformed: false,\n        min: [2, 1],\n        max: [-1, 0]\n    };\n    for (var i = 0; i < features.length; i++) {\n        tile.numFeatures++;\n        addFeature(tile, features[i], tolerance, noSimplify);\n\n        var min = features[i].min,\n            max = features[i].max;\n\n        if (min[0] < tile.min[0]) { tile.min[0] = min[0]; }\n        if (min[1] < tile.min[1]) { tile.min[1] = min[1]; }\n        if (max[0] > tile.max[0]) { tile.max[0] = max[0]; }\n        if (max[1] > tile.max[1]) { tile.max[1] = max[1]; }\n    }\n    return tile;\n}\n\nfunction addFeature(tile, feature, tolerance, noSimplify) {\n\n    var geom = feature.geometry,\n        type = feature.type,\n        simplified = [],\n        sqTolerance = tolerance * tolerance,\n        i, j, ring, p;\n\n    if (type === 1) {\n        for (i = 0; i < geom.length; i++) {\n            simplified.push(geom[i]);\n            tile.numPoints++;\n            tile.numSimplified++;\n        }\n\n    } else {\n\n        // simplify and transform projected coordinates for tile geometry\n        for (i = 0; i < geom.length; i++) {\n            ring = geom[i];\n\n            // filter out tiny polylines & polygons\n            if (!noSimplify && ((type === 2 && ring.dist < tolerance) ||\n                                (type === 3 && ring.area < sqTolerance))) {\n                tile.numPoints += ring.length;\n                continue;\n            }\n\n            var simplifiedRing = [];\n\n            for (j = 0; j < ring.length; j++) {\n                p = ring[j];\n                // keep points with importance > tolerance\n                if (noSimplify || p[2] > sqTolerance) {\n                    simplifiedRing.push(p);\n                    tile.numSimplified++;\n                }\n                tile.numPoints++;\n            }\n\n            if (type === 3) { rewind(simplifiedRing, ring.outer); }\n\n            simplified.push(simplifiedRing);\n        }\n    }\n\n    if (simplified.length) {\n        var tileFeature = {\n            geometry: simplified,\n            type: type,\n            tags: feature.tags || null\n        };\n        if (feature.id !== null) {\n            tileFeature.id = feature.id;\n        }\n        tile.features.push(tileFeature);\n    }\n}\n\nfunction rewind(ring, clockwise) {\n    var area = signedArea(ring);\n    if (area < 0 === clockwise) { ring.reverse(); }\n}\n\nfunction signedArea(ring) {\n    var sum = 0;\n    for (var i = 0, len = ring.length, j = len - 1, p1, p2; i < len; j = i++) {\n        p1 = ring[i];\n        p2 = ring[j];\n        sum += (p2[0] - p1[0]) * (p1[1] + p2[1]);\n    }\n    return sum;\n}\n\nvar index = geojsonvt;\n\nvar convert = convert_1;\nvar transform = transform$1;\nvar clip = clip_1;\nvar wrap = wrap_1;\nvar createTile = tile$1;     // final simplified tile generation\n\n\nfunction geojsonvt(data, options) {\n    return new GeoJSONVT(data, options);\n}\n\nfunction GeoJSONVT(data, options) {\n    options = this.options = extend(Object.create(this.options), options);\n\n    var debug = options.debug;\n\n    if (debug) { console.time('preprocess data'); }\n\n    var z2 = 1 << options.maxZoom, // 2^z\n        features = convert(data, options.tolerance / (z2 * options.extent));\n\n    this.tiles = {};\n    this.tileCoords = [];\n\n    if (debug) {\n        console.timeEnd('preprocess data');\n        console.log('index: maxZoom: %d, maxPoints: %d', options.indexMaxZoom, options.indexMaxPoints);\n        console.time('generate tiles');\n        this.stats = {};\n        this.total = 0;\n    }\n\n    features = wrap(features, options.buffer / options.extent, intersectX);\n\n    // start slicing from the top tile down\n    if (features.length) { this.splitTile(features, 0, 0, 0); }\n\n    if (debug) {\n        if (features.length) { console.log('features: %d, points: %d', this.tiles[0].numFeatures, this.tiles[0].numPoints); }\n        console.timeEnd('generate tiles');\n        console.log('tiles generated:', this.total, JSON.stringify(this.stats));\n    }\n}\n\nGeoJSONVT.prototype.options = {\n    maxZoom: 14,            // max zoom to preserve detail on\n    indexMaxZoom: 5,        // max zoom in the tile index\n    indexMaxPoints: 100000, // max number of points per tile in the tile index\n    solidChildren: false,   // whether to tile solid square tiles further\n    tolerance: 3,           // simplification tolerance (higher means simpler)\n    extent: 4096,           // tile extent\n    buffer: 64,             // tile buffer on each side\n    debug: 0                // logging level (0, 1 or 2)\n};\n\nGeoJSONVT.prototype.splitTile = function (features, z, x, y, cz, cx, cy) {\n    var this$1 = this;\n\n\n    var stack = [features, z, x, y],\n        options = this.options,\n        debug = options.debug,\n        solid = null;\n\n    // avoid recursion by using a processing queue\n    while (stack.length) {\n        y = stack.pop();\n        x = stack.pop();\n        z = stack.pop();\n        features = stack.pop();\n\n        var z2 = 1 << z,\n            id = toID(z, x, y),\n            tile = this$1.tiles[id],\n            tileTolerance = z === options.maxZoom ? 0 : options.tolerance / (z2 * options.extent);\n\n        if (!tile) {\n            if (debug > 1) { console.time('creation'); }\n\n            tile = this$1.tiles[id] = createTile(features, z2, x, y, tileTolerance, z === options.maxZoom);\n            this$1.tileCoords.push({z: z, x: x, y: y});\n\n            if (debug) {\n                if (debug > 1) {\n                    console.log('tile z%d-%d-%d (features: %d, points: %d, simplified: %d)',\n                        z, x, y, tile.numFeatures, tile.numPoints, tile.numSimplified);\n                    console.timeEnd('creation');\n                }\n                var key = 'z' + z;\n                this$1.stats[key] = (this$1.stats[key] || 0) + 1;\n                this$1.total++;\n            }\n        }\n\n        // save reference to original geometry in tile so that we can drill down later if we stop now\n        tile.source = features;\n\n        // if it's the first-pass tiling\n        if (!cz) {\n            // stop tiling if we reached max zoom, or if the tile is too simple\n            if (z === options.indexMaxZoom || tile.numPoints <= options.indexMaxPoints) { continue; }\n\n        // if a drilldown to a specific tile\n        } else {\n            // stop tiling if we reached base zoom or our target tile zoom\n            if (z === options.maxZoom || z === cz) { continue; }\n\n            // stop tiling if it's not an ancestor of the target tile\n            var m = 1 << (cz - z);\n            if (x !== Math.floor(cx / m) || y !== Math.floor(cy / m)) { continue; }\n        }\n\n        // stop tiling if the tile is solid clipped square\n        if (!options.solidChildren && isClippedSquare(tile, options.extent, options.buffer)) {\n            if (cz) { solid = z; } // and remember the zoom if we're drilling down\n            continue;\n        }\n\n        // if we slice further down, no need to keep source geometry\n        tile.source = null;\n\n        if (debug > 1) { console.time('clipping'); }\n\n        // values we'll use for clipping\n        var k1 = 0.5 * options.buffer / options.extent,\n            k2 = 0.5 - k1,\n            k3 = 0.5 + k1,\n            k4 = 1 + k1,\n            tl, bl, tr, br, left, right;\n\n        tl = bl = tr = br = null;\n\n        left  = clip(features, z2, x - k1, x + k3, 0, intersectX, tile.min[0], tile.max[0]);\n        right = clip(features, z2, x + k2, x + k4, 0, intersectX, tile.min[0], tile.max[0]);\n\n        if (left) {\n            tl = clip(left, z2, y - k1, y + k3, 1, intersectY, tile.min[1], tile.max[1]);\n            bl = clip(left, z2, y + k2, y + k4, 1, intersectY, tile.min[1], tile.max[1]);\n        }\n\n        if (right) {\n            tr = clip(right, z2, y - k1, y + k3, 1, intersectY, tile.min[1], tile.max[1]);\n            br = clip(right, z2, y + k2, y + k4, 1, intersectY, tile.min[1], tile.max[1]);\n        }\n\n        if (debug > 1) { console.timeEnd('clipping'); }\n\n        if (features.length) {\n            stack.push(tl || [], z + 1, x * 2,     y * 2);\n            stack.push(bl || [], z + 1, x * 2,     y * 2 + 1);\n            stack.push(tr || [], z + 1, x * 2 + 1, y * 2);\n            stack.push(br || [], z + 1, x * 2 + 1, y * 2 + 1);\n        }\n    }\n\n    return solid;\n};\n\nGeoJSONVT.prototype.getTile = function (z, x, y) {\n    var this$1 = this;\n\n    var options = this.options,\n        extent = options.extent,\n        debug = options.debug;\n\n    var z2 = 1 << z;\n    x = ((x % z2) + z2) % z2; // wrap tile x coordinate\n\n    var id = toID(z, x, y);\n    if (this.tiles[id]) { return transform.tile(this.tiles[id], extent); }\n\n    if (debug > 1) { console.log('drilling down to z%d-%d-%d', z, x, y); }\n\n    var z0 = z,\n        x0 = x,\n        y0 = y,\n        parent;\n\n    while (!parent && z0 > 0) {\n        z0--;\n        x0 = Math.floor(x0 / 2);\n        y0 = Math.floor(y0 / 2);\n        parent = this$1.tiles[toID(z0, x0, y0)];\n    }\n\n    if (!parent || !parent.source) { return null; }\n\n    // if we found a parent tile containing the original geometry, we can drill down from it\n    if (debug > 1) { console.log('found parent tile z%d-%d-%d', z0, x0, y0); }\n\n    // it parent tile is a solid clipped square, return it instead since it's identical\n    if (isClippedSquare(parent, extent, options.buffer)) { return transform.tile(parent, extent); }\n\n    if (debug > 1) { console.time('drilling down'); }\n    var solid = this.splitTile(parent.source, z0, x0, y0, z, x, y);\n    if (debug > 1) { console.timeEnd('drilling down'); }\n\n    // one of the parent tiles was a solid clipped square\n    if (solid !== null) {\n        var m = 1 << (z - solid);\n        id = toID(solid, Math.floor(x / m), Math.floor(y / m));\n    }\n\n    return this.tiles[id] ? transform.tile(this.tiles[id], extent) : null;\n};\n\nfunction toID(z, x, y) {\n    return (((1 << z) * y + x) * 32) + z;\n}\n\nfunction intersectX(a, b, x) {\n    return [x, (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0]) + a[1], 1];\n}\nfunction intersectY(a, b, y) {\n    return [(y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]) + a[0], y, 1];\n}\n\nfunction extend(dest, src) {\n    for (var i in src) { dest[i] = src[i]; }\n    return dest;\n}\n\n// checks whether a tile is a whole-area fill after clipping; if it is, there's no sense slicing it further\nfunction isClippedSquare(tile, extent, buffer) {\n\n    var features = tile.source;\n    if (features.length !== 1) { return false; }\n\n    var feature = features[0];\n    if (feature.type !== 3 || feature.geometry.length > 1) { return false; }\n\n    var len = feature.geometry[0].length;\n    if (len !== 5) { return false; }\n\n    for (var i = 0; i < len; i++) {\n        var p = transform.point(feature.geometry[0][i], extent, tile.z2, tile.x, tile.y);\n        if ((p[0] !== -buffer && p[0] !== extent + buffer) ||\n            (p[1] !== -buffer && p[1] !== extent + buffer)) { return false; }\n    }\n\n    return true;\n}\n\nvar identity = function(x) {\n  return x;\n};\n\nvar transform$3 = function(topology) {\n  if ((transform = topology.transform) == null) { return identity; }\n  var transform,\n      x0,\n      y0,\n      kx = transform.scale[0],\n      ky = transform.scale[1],\n      dx = transform.translate[0],\n      dy = transform.translate[1];\n  return function(point, i) {\n    if (!i) { x0 = y0 = 0; }\n    point[0] = (x0 += point[0]) * kx + dx;\n    point[1] = (y0 += point[1]) * ky + dy;\n    return point;\n  };\n};\n\nvar bbox = function(topology) {\n  var bbox = topology.bbox;\n\n  function bboxPoint(p0) {\n    p1[0] = p0[0], p1[1] = p0[1], t(p1);\n    if (p1[0] < x0) { x0 = p1[0]; }\n    if (p1[0] > x1) { x1 = p1[0]; }\n    if (p1[1] < y0) { y0 = p1[1]; }\n    if (p1[1] > y1) { y1 = p1[1]; }\n  }\n\n  function bboxGeometry(o) {\n    switch (o.type) {\n      case \"GeometryCollection\": o.geometries.forEach(bboxGeometry); break;\n      case \"Point\": bboxPoint(o.coordinates); break;\n      case \"MultiPoint\": o.coordinates.forEach(bboxPoint); break;\n    }\n  }\n\n  if (!bbox) {\n    var t = transform$3(topology), p0, p1 = new Array(2), name,\n        x0 = Infinity, y0 = x0, x1 = -x0, y1 = -x0;\n\n    topology.arcs.forEach(function(arc) {\n      var i = -1, n = arc.length;\n      while (++i < n) {\n        p0 = arc[i], p1[0] = p0[0], p1[1] = p0[1], t(p1, i);\n        if (p1[0] < x0) { x0 = p1[0]; }\n        if (p1[0] > x1) { x1 = p1[0]; }\n        if (p1[1] < y0) { y0 = p1[1]; }\n        if (p1[1] > y1) { y1 = p1[1]; }\n      }\n    });\n\n    for (name in topology.objects) {\n      bboxGeometry(topology.objects[name]);\n    }\n\n    bbox = topology.bbox = [x0, y0, x1, y1];\n  }\n\n  return bbox;\n};\n\nvar reverse = function(array, n) {\n  var t, j = array.length, i = j - n;\n  while (i < --j) { t = array[i], array[i++] = array[j], array[j] = t; }\n};\n\nvar feature$2 = function(topology, o) {\n  return o.type === \"GeometryCollection\"\n      ? {type: \"FeatureCollection\", features: o.geometries.map(function(o) { return feature$3(topology, o); })}\n      : feature$3(topology, o);\n};\n\nfunction feature$3(topology, o) {\n  var id = o.id,\n      bbox = o.bbox,\n      properties = o.properties == null ? {} : o.properties,\n      geometry = object(topology, o);\n  return id == null && bbox == null ? {type: \"Feature\", properties: properties, geometry: geometry}\n      : bbox == null ? {type: \"Feature\", id: id, properties: properties, geometry: geometry}\n      : {type: \"Feature\", id: id, bbox: bbox, properties: properties, geometry: geometry};\n}\n\nfunction object(topology, o) {\n  var transformPoint = transform$3(topology),\n      arcs = topology.arcs;\n\n  function arc(i, points) {\n    if (points.length) { points.pop(); }\n    for (var a = arcs[i < 0 ? ~i : i], k = 0, n = a.length; k < n; ++k) {\n      points.push(transformPoint(a[k].slice(), k));\n    }\n    if (i < 0) { reverse(points, n); }\n  }\n\n  function point(p) {\n    return transformPoint(p.slice());\n  }\n\n  function line(arcs) {\n    var points = [];\n    for (var i = 0, n = arcs.length; i < n; ++i) { arc(arcs[i], points); }\n    if (points.length < 2) { points.push(points[0].slice()); }\n    return points;\n  }\n\n  function ring(arcs) {\n    var points = line(arcs);\n    while (points.length < 4) { points.push(points[0].slice()); }\n    return points;\n  }\n\n  function polygon(arcs) {\n    return arcs.map(ring);\n  }\n\n  function geometry(o) {\n    var type = o.type, coordinates;\n    switch (type) {\n      case \"GeometryCollection\": return {type: type, geometries: o.geometries.map(geometry)};\n      case \"Point\": coordinates = point(o.coordinates); break;\n      case \"MultiPoint\": coordinates = o.coordinates.map(point); break;\n      case \"LineString\": coordinates = line(o.arcs); break;\n      case \"MultiLineString\": coordinates = o.arcs.map(line); break;\n      case \"Polygon\": coordinates = polygon(o.arcs); break;\n      case \"MultiPolygon\": coordinates = o.arcs.map(polygon); break;\n      default: return null;\n    }\n    return {type: type, coordinates: coordinates};\n  }\n\n  return geometry(o);\n}\n\nvar stitch = function(topology, arcs) {\n  var stitchedArcs = {},\n      fragmentByStart = {},\n      fragmentByEnd = {},\n      fragments = [],\n      emptyIndex = -1;\n\n  // Stitch empty arcs first, since they may be subsumed by other arcs.\n  arcs.forEach(function(i, j) {\n    var arc = topology.arcs[i < 0 ? ~i : i], t;\n    if (arc.length < 3 && !arc[1][0] && !arc[1][1]) {\n      t = arcs[++emptyIndex], arcs[emptyIndex] = i, arcs[j] = t;\n    }\n  });\n\n  arcs.forEach(function(i) {\n    var e = ends(i),\n        start = e[0],\n        end = e[1],\n        f, g;\n\n    if (f = fragmentByEnd[start]) {\n      delete fragmentByEnd[f.end];\n      f.push(i);\n      f.end = end;\n      if (g = fragmentByStart[end]) {\n        delete fragmentByStart[g.start];\n        var fg = g === f ? f : f.concat(g);\n        fragmentByStart[fg.start = f.start] = fragmentByEnd[fg.end = g.end] = fg;\n      } else {\n        fragmentByStart[f.start] = fragmentByEnd[f.end] = f;\n      }\n    } else if (f = fragmentByStart[end]) {\n      delete fragmentByStart[f.start];\n      f.unshift(i);\n      f.start = start;\n      if (g = fragmentByEnd[start]) {\n        delete fragmentByEnd[g.end];\n        var gf = g === f ? f : g.concat(f);\n        fragmentByStart[gf.start = g.start] = fragmentByEnd[gf.end = f.end] = gf;\n      } else {\n        fragmentByStart[f.start] = fragmentByEnd[f.end] = f;\n      }\n    } else {\n      f = [i];\n      fragmentByStart[f.start = start] = fragmentByEnd[f.end = end] = f;\n    }\n  });\n\n  function ends(i) {\n    var arc = topology.arcs[i < 0 ? ~i : i], p0 = arc[0], p1;\n    if (topology.transform) { p1 = [0, 0], arc.forEach(function(dp) { p1[0] += dp[0], p1[1] += dp[1]; }); }\n    else { p1 = arc[arc.length - 1]; }\n    return i < 0 ? [p1, p0] : [p0, p1];\n  }\n\n  function flush(fragmentByEnd, fragmentByStart) {\n    for (var k in fragmentByEnd) {\n      var f = fragmentByEnd[k];\n      delete fragmentByStart[f.start];\n      delete f.start;\n      delete f.end;\n      f.forEach(function(i) { stitchedArcs[i < 0 ? ~i : i] = 1; });\n      fragments.push(f);\n    }\n  }\n\n  flush(fragmentByEnd, fragmentByStart);\n  flush(fragmentByStart, fragmentByEnd);\n  arcs.forEach(function(i) { if (!stitchedArcs[i < 0 ? ~i : i]) { fragments.push([i]); } });\n\n  return fragments;\n};\n\nfunction extractArcs(topology, object$$1, filter) {\n  var arcs = [],\n      geomsByArc = [],\n      geom;\n\n  function extract0(i) {\n    var j = i < 0 ? ~i : i;\n    (geomsByArc[j] || (geomsByArc[j] = [])).push({i: i, g: geom});\n  }\n\n  function extract1(arcs) {\n    arcs.forEach(extract0);\n  }\n\n  function extract2(arcs) {\n    arcs.forEach(extract1);\n  }\n\n  function extract3(arcs) {\n    arcs.forEach(extract2);\n  }\n\n  function geometry(o) {\n    switch (geom = o, o.type) {\n      case \"GeometryCollection\": o.geometries.forEach(geometry); break;\n      case \"LineString\": extract1(o.arcs); break;\n      case \"MultiLineString\": case \"Polygon\": extract2(o.arcs); break;\n      case \"MultiPolygon\": extract3(o.arcs); break;\n    }\n  }\n\n  geometry(object$$1);\n\n  geomsByArc.forEach(filter == null\n      ? function(geoms) { arcs.push(geoms[0].i); }\n      : function(geoms) { if (filter(geoms[0].g, geoms[geoms.length - 1].g)) { arcs.push(geoms[0].i); } });\n\n  return arcs;\n}\n\nfunction planarRingArea(ring) {\n  var i = -1, n = ring.length, a, b = ring[n - 1], area = 0;\n  while (++i < n) { a = b, b = ring[i], area += a[0] * b[1] - a[1] * b[0]; }\n  return Math.abs(area); // Note: doubled area!\n}\n\nvar bisect = function(a, x) {\n  var lo = 0, hi = a.length;\n  while (lo < hi) {\n    var mid = lo + hi >>> 1;\n    if (a[mid] < x) { lo = mid + 1; }\n    else { hi = mid; }\n  }\n  return lo;\n};\n\nvar slicers = {};\nvar options;\n\nonmessage = function (e) {\n	if (e.data[0] === 'slice') {\n		// Given a blob of GeoJSON and some topojson/geojson-vt options, do the slicing.\n		var geojson = e.data[1];\n		options     = e.data[2];\n\n		if (geojson.type && geojson.type === 'Topology') {\n			for (var layerName in geojson.objects) {\n				slicers[layerName] = index(\n					feature$2(geojson, geojson.objects[layerName])\n				, options);\n			}\n		} else {\n			slicers[options.vectorTileLayerName] = index(geojson, options);\n		}\n\n	} else if (e.data[0] === 'get') {\n		// Gets the vector tile for the given coordinates, sends it back as a message\n		var coords = e.data[1];\n\n		var tileLayers = {};\n		for (var layerName in slicers) {\n			var slicedTileLayer = slicers[layerName].getTile(coords.z, coords.x, coords.y);\n\n			if (slicedTileLayer) {\n				var vectorTileLayer = {\n					features: [],\n					extent: options.extent,\n					name: options.vectorTileLayerName,\n					length: slicedTileLayer.features.length\n				};\n\n				for (var i in slicedTileLayer.features) {\n					var feat = {\n						geometry: slicedTileLayer.features[i].geometry,\n						properties: slicedTileLayer.features[i].tags,\n						type: slicedTileLayer.features[i].type	// 1 = point, 2 = line, 3 = polygon\n					};\n					vectorTileLayer.features.push(feat);\n				}\n				tileLayers[layerName] = vectorTileLayer;\n			}\n		}\n		postMessage({ layers: tileLayers, coords: coords });\n	}\n};\n//# sourceMap" + "pingURL=slicerWebWorker.js.worker.map\n", "text/plain; charset=us-ascii", false);
+var simplify_1 = simplify$1;
 
-// The geojson/topojson is sliced into tiles via a web worker.
-// This import statement depends on rollup-file-as-blob, so that the
-// variable 'workerCode' is a blob URL.
+// calculate simplification data using optimized Douglas-Peucker algorithm
+
+function simplify$1(points, tolerance) {
+
+    var sqTolerance = tolerance * tolerance,
+        len = points.length,
+        first = 0,
+        last = len - 1,
+        stack = [],
+        i, maxSqDist, sqDist, index;
+
+    // always retain the endpoints (1 is the max value)
+    points[first][2] = 1;
+    points[last][2] = 1;
+
+    // avoid recursion by using a stack
+    while (last) {
+
+        maxSqDist = 0;
+
+        for (i = first + 1; i < last; i++) {
+            sqDist = getSqSegDist(points[i], points[first], points[last]);
+
+            if (sqDist > maxSqDist) {
+                index = i;
+                maxSqDist = sqDist;
+            }
+        }
+
+        if (maxSqDist > sqTolerance) {
+            points[index][2] = maxSqDist; // save the point importance in squared pixels as a z coordinate
+            stack.push(first);
+            stack.push(index);
+            first = index;
+
+        } else {
+            last = stack.pop();
+            first = stack.pop();
+        }
+    }
+}
+
+// square distance from a point to a segment
+function getSqSegDist(p, a, b) {
+
+    var x = a[0], y = a[1],
+        bx = b[0], by = b[1],
+        px = p[0], py = p[1],
+        dx = bx - x,
+        dy = by - y;
+
+    if (dx !== 0 || dy !== 0) {
+
+        var t = ((px - x) * dx + (py - y) * dy) / (dx * dx + dy * dy);
+
+        if (t > 1) {
+            x = bx;
+            y = by;
+
+        } else if (t > 0) {
+            x += dx * t;
+            y += dy * t;
+        }
+    }
+
+    dx = px - x;
+    dy = py - y;
+
+    return dx * dx + dy * dy;
+}
+
+var feature = createFeature$1;
+
+function createFeature$1(tags, type, geom, id) {
+    var feature = {
+        id: id || null,
+        type: type,
+        geometry: geom,
+        tags: tags || null,
+        min: [Infinity, Infinity], // initial bbox values
+        max: [-Infinity, -Infinity]
+    };
+    calcBBox(feature);
+    return feature;
+}
+
+// calculate the feature bounding box for faster clipping later
+function calcBBox(feature) {
+    var geometry = feature.geometry,
+        min = feature.min,
+        max = feature.max;
+
+    if (feature.type === 1) {
+        calcRingBBox(min, max, geometry);
+    } else {
+        for (var i = 0; i < geometry.length; i++) {
+            calcRingBBox(min, max, geometry[i]);
+        }
+    }
+
+    return feature;
+}
+
+function calcRingBBox(min, max, points) {
+    for (var i = 0, p; i < points.length; i++) {
+        p = points[i];
+        min[0] = Math.min(p[0], min[0]);
+        max[0] = Math.max(p[0], max[0]);
+        min[1] = Math.min(p[1], min[1]);
+        max[1] = Math.max(p[1], max[1]);
+    }
+}
+
+var convert_1 = convert$1;
+
+var simplify = simplify_1;
+var createFeature = feature;
+
+// converts GeoJSON feature into an intermediate projected JSON vector format with simplification data
+
+function convert$1(data, tolerance) {
+    var features = [];
+
+    if (data.type === 'FeatureCollection') {
+        for (var i = 0; i < data.features.length; i++) {
+            convertFeature(features, data.features[i], tolerance);
+        }
+    } else if (data.type === 'Feature') {
+        convertFeature(features, data, tolerance);
+
+    } else {
+        // single geometry or a geometry collection
+        convertFeature(features, {geometry: data}, tolerance);
+    }
+    return features;
+}
+
+function convertFeature(features, feature$$1, tolerance) {
+    if (feature$$1.geometry === null) {
+        // ignore features with null geometry
+        return;
+    }
+
+    var geom = feature$$1.geometry,
+        type = geom.type,
+        coords = geom.coordinates,
+        tags = feature$$1.properties,
+        id = feature$$1.id,
+        i, j, rings, projectedRing;
+
+    if (type === 'Point') {
+        features.push(createFeature(tags, 1, [projectPoint(coords)], id));
+
+    } else if (type === 'MultiPoint') {
+        features.push(createFeature(tags, 1, project(coords), id));
+
+    } else if (type === 'LineString') {
+        features.push(createFeature(tags, 2, [project(coords, tolerance)], id));
+
+    } else if (type === 'MultiLineString' || type === 'Polygon') {
+        rings = [];
+        for (i = 0; i < coords.length; i++) {
+            projectedRing = project(coords[i], tolerance);
+            if (type === 'Polygon') { projectedRing.outer = (i === 0); }
+            rings.push(projectedRing);
+        }
+        features.push(createFeature(tags, type === 'Polygon' ? 3 : 2, rings, id));
+
+    } else if (type === 'MultiPolygon') {
+        rings = [];
+        for (i = 0; i < coords.length; i++) {
+            for (j = 0; j < coords[i].length; j++) {
+                projectedRing = project(coords[i][j], tolerance);
+                projectedRing.outer = (j === 0);
+                rings.push(projectedRing);
+            }
+        }
+        features.push(createFeature(tags, 3, rings, id));
+
+    } else if (type === 'GeometryCollection') {
+        for (i = 0; i < geom.geometries.length; i++) {
+            convertFeature(features, {
+                geometry: geom.geometries[i],
+                properties: tags
+            }, tolerance);
+        }
+
+    } else {
+        throw new Error('Input data is not a valid GeoJSON object.');
+    }
+}
+
+function project(lonlats, tolerance) {
+    var projected = [];
+    for (var i = 0; i < lonlats.length; i++) {
+        projected.push(projectPoint(lonlats[i]));
+    }
+    if (tolerance) {
+        simplify(projected, tolerance);
+        calcSize(projected);
+    }
+    return projected;
+}
+
+function projectPoint(p) {
+    var sin = Math.sin(p[1] * Math.PI / 180),
+        x = (p[0] / 360 + 0.5),
+        y = (0.5 - 0.25 * Math.log((1 + sin) / (1 - sin)) / Math.PI);
+
+    y = y < 0 ? 0 :
+        y > 1 ? 1 : y;
+
+    return [x, y, 0];
+}
+
+// calculate area and length of the poly
+function calcSize(points) {
+    var area = 0,
+        dist = 0;
+
+    for (var i = 0, a, b; i < points.length - 1; i++) {
+        a = b || points[i];
+        b = points[i + 1];
+
+        area += a[0] * b[1] - b[0] * a[1];
+
+        // use Manhattan distance instead of Euclidian one to avoid expensive square root computation
+        dist += Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+    }
+    points.area = Math.abs(area / 2);
+    points.dist = dist;
+}
+
+var tile = transformTile;
+var point = transformPoint;
+
+// Transforms the coordinates of each feature in the given tile from
+// mercator-projected space into (extent x extent) tile space.
+function transformTile(tile, extent) {
+    if (tile.transformed) { return tile; }
+
+    var z2 = tile.z2,
+        tx = tile.x,
+        ty = tile.y,
+        i, j, k;
+
+    for (i = 0; i < tile.features.length; i++) {
+        var feature = tile.features[i],
+            geom = feature.geometry,
+            type = feature.type;
+
+        if (type === 1) {
+            for (j = 0; j < geom.length; j++) { geom[j] = transformPoint(geom[j], extent, z2, tx, ty); }
+
+        } else {
+            for (j = 0; j < geom.length; j++) {
+                var ring = geom[j];
+                for (k = 0; k < ring.length; k++) { ring[k] = transformPoint(ring[k], extent, z2, tx, ty); }
+            }
+        }
+    }
+
+    tile.transformed = true;
+
+    return tile;
+}
+
+function transformPoint(p, extent, z2, tx, ty) {
+    var x = Math.round(extent * (p[0] * z2 - tx)),
+        y = Math.round(extent * (p[1] * z2 - ty));
+    return [x, y];
+}
+
+var transform$1 = {
+	tile: tile,
+	point: point
+};
+
+var clip_1 = clip$1;
+
+var createFeature$2 = feature;
+
+/* clip features between two axis-parallel lines:
+ *     |        |
+ *  ___|___     |     /
+ * /   |   \____|____/
+ *     |        |
+ */
+
+function clip$1(features, scale, k1, k2, axis, intersect, minAll, maxAll) {
+
+    k1 /= scale;
+    k2 /= scale;
+
+    if (minAll >= k1 && maxAll <= k2) { return features; } // trivial accept
+    else if (minAll > k2 || maxAll < k1) { return null; } // trivial reject
+
+    var clipped = [];
+
+    for (var i = 0; i < features.length; i++) {
+
+        var feature$$1 = features[i],
+            geometry = feature$$1.geometry,
+            type = feature$$1.type,
+            min, max;
+
+        min = feature$$1.min[axis];
+        max = feature$$1.max[axis];
+
+        if (min >= k1 && max <= k2) { // trivial accept
+            clipped.push(feature$$1);
+            continue;
+        } else if (min > k2 || max < k1) { continue; } // trivial reject
+
+        var slices = type === 1 ?
+                clipPoints(geometry, k1, k2, axis) :
+                clipGeometry(geometry, k1, k2, axis, intersect, type === 3);
+
+        if (slices.length) {
+            // if a feature got clipped, it will likely get clipped on the next zoom level as well,
+            // so there's no need to recalculate bboxes
+            clipped.push(createFeature$2(feature$$1.tags, type, slices, feature$$1.id));
+        }
+    }
+
+    return clipped.length ? clipped : null;
+}
+
+function clipPoints(geometry, k1, k2, axis) {
+    var slice = [];
+
+    for (var i = 0; i < geometry.length; i++) {
+        var a = geometry[i],
+            ak = a[axis];
+
+        if (ak >= k1 && ak <= k2) { slice.push(a); }
+    }
+    return slice;
+}
+
+function clipGeometry(geometry, k1, k2, axis, intersect, closed) {
+
+    var slices = [];
+
+    for (var i = 0; i < geometry.length; i++) {
+
+        var ak = 0,
+            bk = 0,
+            b = null,
+            points = geometry[i],
+            area = points.area,
+            dist = points.dist,
+            outer = points.outer,
+            len = points.length,
+            a, j, last;
+
+        var slice = [];
+
+        for (j = 0; j < len - 1; j++) {
+            a = b || points[j];
+            b = points[j + 1];
+            ak = bk || a[axis];
+            bk = b[axis];
+
+            if (ak < k1) {
+
+                if ((bk > k2)) { // ---|-----|-->
+                    slice.push(intersect(a, b, k1), intersect(a, b, k2));
+                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }
+
+                } else if (bk >= k1) { slice.push(intersect(a, b, k1)); } // ---|-->  |
+
+            } else if (ak > k2) {
+
+                if ((bk < k1)) { // <--|-----|---
+                    slice.push(intersect(a, b, k2), intersect(a, b, k1));
+                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }
+
+                } else if (bk <= k2) { slice.push(intersect(a, b, k2)); } // |  <--|---
+
+            } else {
+
+                slice.push(a);
+
+                if (bk < k1) { // <--|---  |
+                    slice.push(intersect(a, b, k1));
+                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }
+
+                } else if (bk > k2) { // |  ---|-->
+                    slice.push(intersect(a, b, k2));
+                    if (!closed) { slice = newSlice(slices, slice, area, dist, outer); }
+                }
+                // | --> |
+            }
+        }
+
+        // add the last point
+        a = points[len - 1];
+        ak = a[axis];
+        if (ak >= k1 && ak <= k2) { slice.push(a); }
+
+        // close the polygon if its endpoints are not the same after clipping
+
+        last = slice[slice.length - 1];
+        if (closed && last && (slice[0][0] !== last[0] || slice[0][1] !== last[1])) { slice.push(slice[0]); }
+
+        // add the final slice
+        newSlice(slices, slice, area, dist, outer);
+    }
+
+    return slices;
+}
+
+function newSlice(slices, slice, area, dist, outer) {
+    if (slice.length) {
+        // we don't recalculate the area/length of the unclipped geometry because the case where it goes
+        // below the visibility threshold as a result of clipping is rare, so we avoid doing unnecessary work
+        slice.area = area;
+        slice.dist = dist;
+        if (outer !== undefined) { slice.outer = outer; }
+
+        slices.push(slice);
+    }
+    return [];
+}
+
+var clip$2 = clip_1;
+var createFeature$3 = feature;
+
+var wrap_1 = wrap$1;
+
+function wrap$1(features, buffer, intersectX) {
+    var merged = features,
+        left  = clip$2(features, 1, -1 - buffer, buffer,     0, intersectX, -1, 2), // left world copy
+        right = clip$2(features, 1,  1 - buffer, 2 + buffer, 0, intersectX, -1, 2); // right world copy
+
+    if (left || right) {
+        merged = clip$2(features, 1, -buffer, 1 + buffer, 0, intersectX, -1, 2) || []; // center world copy
+
+        if (left) { merged = shiftFeatureCoords(left, 1).concat(merged); } // merge left into center
+        if (right) { merged = merged.concat(shiftFeatureCoords(right, -1)); } // merge right into center
+    }
+
+    return merged;
+}
+
+function shiftFeatureCoords(features, offset) {
+    var newFeatures = [];
+
+    for (var i = 0; i < features.length; i++) {
+        var feature$$1 = features[i],
+            type = feature$$1.type;
+
+        var newGeometry;
+
+        if (type === 1) {
+            newGeometry = shiftCoords(feature$$1.geometry, offset);
+        } else {
+            newGeometry = [];
+            for (var j = 0; j < feature$$1.geometry.length; j++) {
+                newGeometry.push(shiftCoords(feature$$1.geometry[j], offset));
+            }
+        }
+
+        newFeatures.push(createFeature$3(feature$$1.tags, type, newGeometry, feature$$1.id));
+    }
+
+    return newFeatures;
+}
+
+function shiftCoords(points, offset) {
+    var newPoints = [];
+    newPoints.area = points.area;
+    newPoints.dist = points.dist;
+
+    for (var i = 0; i < points.length; i++) {
+        newPoints.push([points[i][0] + offset, points[i][1], points[i][2]]);
+    }
+    return newPoints;
+}
+
+var tile$1 = createTile$1;
+
+function createTile$1(features, z2, tx, ty, tolerance, noSimplify) {
+    var tile = {
+        features: [],
+        numPoints: 0,
+        numSimplified: 0,
+        numFeatures: 0,
+        source: null,
+        x: tx,
+        y: ty,
+        z2: z2,
+        transformed: false,
+        min: [2, 1],
+        max: [-1, 0]
+    };
+    for (var i = 0; i < features.length; i++) {
+        tile.numFeatures++;
+        addFeature(tile, features[i], tolerance, noSimplify);
+
+        var min = features[i].min,
+            max = features[i].max;
+
+        if (min[0] < tile.min[0]) { tile.min[0] = min[0]; }
+        if (min[1] < tile.min[1]) { tile.min[1] = min[1]; }
+        if (max[0] > tile.max[0]) { tile.max[0] = max[0]; }
+        if (max[1] > tile.max[1]) { tile.max[1] = max[1]; }
+    }
+    return tile;
+}
+
+function addFeature(tile, feature, tolerance, noSimplify) {
+
+    var geom = feature.geometry,
+        type = feature.type,
+        simplified = [],
+        sqTolerance = tolerance * tolerance,
+        i, j, ring, p;
+
+    if (type === 1) {
+        for (i = 0; i < geom.length; i++) {
+            simplified.push(geom[i]);
+            tile.numPoints++;
+            tile.numSimplified++;
+        }
+
+    } else {
+
+        // simplify and transform projected coordinates for tile geometry
+        for (i = 0; i < geom.length; i++) {
+            ring = geom[i];
+
+            // filter out tiny polylines & polygons
+            if (!noSimplify && ((type === 2 && ring.dist < tolerance) ||
+                                (type === 3 && ring.area < sqTolerance))) {
+                tile.numPoints += ring.length;
+                continue;
+            }
+
+            var simplifiedRing = [];
+
+            for (j = 0; j < ring.length; j++) {
+                p = ring[j];
+                // keep points with importance > tolerance
+                if (noSimplify || p[2] > sqTolerance) {
+                    simplifiedRing.push(p);
+                    tile.numSimplified++;
+                }
+                tile.numPoints++;
+            }
+
+            if (type === 3) { rewind(simplifiedRing, ring.outer); }
+
+            simplified.push(simplifiedRing);
+        }
+    }
+
+    if (simplified.length) {
+        var tileFeature = {
+            geometry: simplified,
+            type: type,
+            tags: feature.tags || null
+        };
+        if (feature.id !== null) {
+            tileFeature.id = feature.id;
+        }
+        tile.features.push(tileFeature);
+    }
+}
+
+function rewind(ring, clockwise) {
+    var area = signedArea$1(ring);
+    if (area < 0 === clockwise) { ring.reverse(); }
+}
+
+function signedArea$1(ring) {
+    var sum = 0;
+    for (var i = 0, len = ring.length, j = len - 1, p1, p2; i < len; j = i++) {
+        p1 = ring[i];
+        p2 = ring[j];
+        sum += (p2[0] - p1[0]) * (p1[1] + p2[1]);
+    }
+    return sum;
+}
+
+var index$7 = geojsonvt;
+
+var convert = convert_1;
+var transform = transform$1;
+var clip = clip_1;
+var wrap = wrap_1;
+var createTile = tile$1;     // final simplified tile generation
+
+
+function geojsonvt(data, options) {
+    return new GeoJSONVT(data, options);
+}
+
+function GeoJSONVT(data, options) {
+    options = this.options = extend(Object.create(this.options), options);
+
+    var debug = options.debug;
+
+    if (debug) { console.time('preprocess data'); }
+
+    var z2 = 1 << options.maxZoom, // 2^z
+        features = convert(data, options.tolerance / (z2 * options.extent));
+
+    this.tiles = {};
+    this.tileCoords = [];
+
+    if (debug) {
+        console.timeEnd('preprocess data');
+        console.log('index: maxZoom: %d, maxPoints: %d', options.indexMaxZoom, options.indexMaxPoints);
+        console.time('generate tiles');
+        this.stats = {};
+        this.total = 0;
+    }
+
+    features = wrap(features, options.buffer / options.extent, intersectX);
+
+    // start slicing from the top tile down
+    if (features.length) { this.splitTile(features, 0, 0, 0); }
+
+    if (debug) {
+        if (features.length) { console.log('features: %d, points: %d', this.tiles[0].numFeatures, this.tiles[0].numPoints); }
+        console.timeEnd('generate tiles');
+        console.log('tiles generated:', this.total, JSON.stringify(this.stats));
+    }
+}
+
+GeoJSONVT.prototype.options = {
+    maxZoom: 14,            // max zoom to preserve detail on
+    indexMaxZoom: 5,        // max zoom in the tile index
+    indexMaxPoints: 100000, // max number of points per tile in the tile index
+    solidChildren: false,   // whether to tile solid square tiles further
+    tolerance: 3,           // simplification tolerance (higher means simpler)
+    extent: 4096,           // tile extent
+    buffer: 64,             // tile buffer on each side
+    debug: 0                // logging level (0, 1 or 2)
+};
+
+GeoJSONVT.prototype.splitTile = function (features, z, x, y, cz, cx, cy) {
+    var this$1 = this;
+
+
+    var stack = [features, z, x, y],
+        options = this.options,
+        debug = options.debug,
+        solid = null;
+
+    // avoid recursion by using a processing queue
+    while (stack.length) {
+        y = stack.pop();
+        x = stack.pop();
+        z = stack.pop();
+        features = stack.pop();
+
+        var z2 = 1 << z,
+            id = toID(z, x, y),
+            tile = this$1.tiles[id],
+            tileTolerance = z === options.maxZoom ? 0 : options.tolerance / (z2 * options.extent);
+
+        if (!tile) {
+            if (debug > 1) { console.time('creation'); }
+
+            tile = this$1.tiles[id] = createTile(features, z2, x, y, tileTolerance, z === options.maxZoom);
+            this$1.tileCoords.push({z: z, x: x, y: y});
+
+            if (debug) {
+                if (debug > 1) {
+                    console.log('tile z%d-%d-%d (features: %d, points: %d, simplified: %d)',
+                        z, x, y, tile.numFeatures, tile.numPoints, tile.numSimplified);
+                    console.timeEnd('creation');
+                }
+                var key = 'z' + z;
+                this$1.stats[key] = (this$1.stats[key] || 0) + 1;
+                this$1.total++;
+            }
+        }
+
+        // save reference to original geometry in tile so that we can drill down later if we stop now
+        tile.source = features;
+
+        // if it's the first-pass tiling
+        if (!cz) {
+            // stop tiling if we reached max zoom, or if the tile is too simple
+            if (z === options.indexMaxZoom || tile.numPoints <= options.indexMaxPoints) { continue; }
+
+        // if a drilldown to a specific tile
+        } else {
+            // stop tiling if we reached base zoom or our target tile zoom
+            if (z === options.maxZoom || z === cz) { continue; }
+
+            // stop tiling if it's not an ancestor of the target tile
+            var m = 1 << (cz - z);
+            if (x !== Math.floor(cx / m) || y !== Math.floor(cy / m)) { continue; }
+        }
+
+        // stop tiling if the tile is solid clipped square
+        if (!options.solidChildren && isClippedSquare(tile, options.extent, options.buffer)) {
+            if (cz) { solid = z; } // and remember the zoom if we're drilling down
+            continue;
+        }
+
+        // if we slice further down, no need to keep source geometry
+        tile.source = null;
+
+        if (debug > 1) { console.time('clipping'); }
+
+        // values we'll use for clipping
+        var k1 = 0.5 * options.buffer / options.extent,
+            k2 = 0.5 - k1,
+            k3 = 0.5 + k1,
+            k4 = 1 + k1,
+            tl, bl, tr, br, left, right;
+
+        tl = bl = tr = br = null;
+
+        left  = clip(features, z2, x - k1, x + k3, 0, intersectX, tile.min[0], tile.max[0]);
+        right = clip(features, z2, x + k2, x + k4, 0, intersectX, tile.min[0], tile.max[0]);
+
+        if (left) {
+            tl = clip(left, z2, y - k1, y + k3, 1, intersectY, tile.min[1], tile.max[1]);
+            bl = clip(left, z2, y + k2, y + k4, 1, intersectY, tile.min[1], tile.max[1]);
+        }
+
+        if (right) {
+            tr = clip(right, z2, y - k1, y + k3, 1, intersectY, tile.min[1], tile.max[1]);
+            br = clip(right, z2, y + k2, y + k4, 1, intersectY, tile.min[1], tile.max[1]);
+        }
+
+        if (debug > 1) { console.timeEnd('clipping'); }
+
+        if (features.length) {
+            stack.push(tl || [], z + 1, x * 2,     y * 2);
+            stack.push(bl || [], z + 1, x * 2,     y * 2 + 1);
+            stack.push(tr || [], z + 1, x * 2 + 1, y * 2);
+            stack.push(br || [], z + 1, x * 2 + 1, y * 2 + 1);
+        }
+    }
+
+    return solid;
+};
+
+GeoJSONVT.prototype.getTile = function (z, x, y) {
+    var this$1 = this;
+
+    var options = this.options,
+        extent = options.extent,
+        debug = options.debug;
+
+    var z2 = 1 << z;
+    x = ((x % z2) + z2) % z2; // wrap tile x coordinate
+
+    var id = toID(z, x, y);
+    if (this.tiles[id]) { return transform.tile(this.tiles[id], extent); }
+
+    if (debug > 1) { console.log('drilling down to z%d-%d-%d', z, x, y); }
+
+    var z0 = z,
+        x0 = x,
+        y0 = y,
+        parent;
+
+    while (!parent && z0 > 0) {
+        z0--;
+        x0 = Math.floor(x0 / 2);
+        y0 = Math.floor(y0 / 2);
+        parent = this$1.tiles[toID(z0, x0, y0)];
+    }
+
+    if (!parent || !parent.source) { return null; }
+
+    // if we found a parent tile containing the original geometry, we can drill down from it
+    if (debug > 1) { console.log('found parent tile z%d-%d-%d', z0, x0, y0); }
+
+    // it parent tile is a solid clipped square, return it instead since it's identical
+    if (isClippedSquare(parent, extent, options.buffer)) { return transform.tile(parent, extent); }
+
+    if (debug > 1) { console.time('drilling down'); }
+    var solid = this.splitTile(parent.source, z0, x0, y0, z, x, y);
+    if (debug > 1) { console.timeEnd('drilling down'); }
+
+    // one of the parent tiles was a solid clipped square
+    if (solid !== null) {
+        var m = 1 << (z - solid);
+        id = toID(solid, Math.floor(x / m), Math.floor(y / m));
+    }
+
+    return this.tiles[id] ? transform.tile(this.tiles[id], extent) : null;
+};
+
+function toID(z, x, y) {
+    return (((1 << z) * y + x) * 32) + z;
+}
+
+function intersectX(a, b, x) {
+    return [x, (x - a[0]) * (b[1] - a[1]) / (b[0] - a[0]) + a[1], 1];
+}
+function intersectY(a, b, y) {
+    return [(y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]) + a[0], y, 1];
+}
+
+function extend(dest, src) {
+    for (var i in src) { dest[i] = src[i]; }
+    return dest;
+}
+
+// checks whether a tile is a whole-area fill after clipping; if it is, there's no sense slicing it further
+function isClippedSquare(tile, extent, buffer) {
+
+    var features = tile.source;
+    if (features.length !== 1) { return false; }
+
+    var feature = features[0];
+    if (feature.type !== 3 || feature.geometry.length > 1) { return false; }
+
+    var len = feature.geometry[0].length;
+    if (len !== 5) { return false; }
+
+    for (var i = 0; i < len; i++) {
+        var p = transform.point(feature.geometry[0][i], extent, tile.z2, tile.x, tile.y);
+        if ((p[0] !== -buffer && p[0] !== extent + buffer) ||
+            (p[1] !== -buffer && p[1] !== extent + buffer)) { return false; }
+    }
+
+    return true;
+}
+
+var identity = function(x) {
+  return x;
+};
+
+var transform$3 = function(topology) {
+  if ((transform = topology.transform) == null) { return identity; }
+  var transform,
+      x0,
+      y0,
+      kx = transform.scale[0],
+      ky = transform.scale[1],
+      dx = transform.translate[0],
+      dy = transform.translate[1];
+  return function(point, i) {
+    if (!i) { x0 = y0 = 0; }
+    point[0] = (x0 += point[0]) * kx + dx;
+    point[1] = (y0 += point[1]) * ky + dy;
+    return point;
+  };
+};
+
+var bbox = function(topology) {
+  var bbox = topology.bbox;
+
+  function bboxPoint(p0) {
+    p1[0] = p0[0], p1[1] = p0[1], t(p1);
+    if (p1[0] < x0) { x0 = p1[0]; }
+    if (p1[0] > x1) { x1 = p1[0]; }
+    if (p1[1] < y0) { y0 = p1[1]; }
+    if (p1[1] > y1) { y1 = p1[1]; }
+  }
+
+  function bboxGeometry(o) {
+    switch (o.type) {
+      case "GeometryCollection": o.geometries.forEach(bboxGeometry); break;
+      case "Point": bboxPoint(o.coordinates); break;
+      case "MultiPoint": o.coordinates.forEach(bboxPoint); break;
+    }
+  }
+
+  if (!bbox) {
+    var t = transform$3(topology), p0, p1 = new Array(2), name,
+        x0 = Infinity, y0 = x0, x1 = -x0, y1 = -x0;
+
+    topology.arcs.forEach(function(arc) {
+      var i = -1, n = arc.length;
+      while (++i < n) {
+        p0 = arc[i], p1[0] = p0[0], p1[1] = p0[1], t(p1, i);
+        if (p1[0] < x0) { x0 = p1[0]; }
+        if (p1[0] > x1) { x1 = p1[0]; }
+        if (p1[1] < y0) { y0 = p1[1]; }
+        if (p1[1] > y1) { y1 = p1[1]; }
+      }
+    });
+
+    for (name in topology.objects) {
+      bboxGeometry(topology.objects[name]);
+    }
+
+    bbox = topology.bbox = [x0, y0, x1, y1];
+  }
+
+  return bbox;
+};
+
+var reverse = function(array, n) {
+  var t, j = array.length, i = j - n;
+  while (i < --j) { t = array[i], array[i++] = array[j], array[j] = t; }
+};
+
+var feature$2 = function(topology, o) {
+  return o.type === "GeometryCollection"
+      ? {type: "FeatureCollection", features: o.geometries.map(function(o) { return feature$3(topology, o); })}
+      : feature$3(topology, o);
+};
+
+function feature$3(topology, o) {
+  var id = o.id,
+      bbox = o.bbox,
+      properties = o.properties == null ? {} : o.properties,
+      geometry = object(topology, o);
+  return id == null && bbox == null ? {type: "Feature", properties: properties, geometry: geometry}
+      : bbox == null ? {type: "Feature", id: id, properties: properties, geometry: geometry}
+      : {type: "Feature", id: id, bbox: bbox, properties: properties, geometry: geometry};
+}
+
+function object(topology, o) {
+  var transformPoint = transform$3(topology),
+      arcs = topology.arcs;
+
+  function arc(i, points) {
+    if (points.length) { points.pop(); }
+    for (var a = arcs[i < 0 ? ~i : i], k = 0, n = a.length; k < n; ++k) {
+      points.push(transformPoint(a[k].slice(), k));
+    }
+    if (i < 0) { reverse(points, n); }
+  }
+
+  function point(p) {
+    return transformPoint(p.slice());
+  }
+
+  function line(arcs) {
+    var points = [];
+    for (var i = 0, n = arcs.length; i < n; ++i) { arc(arcs[i], points); }
+    if (points.length < 2) { points.push(points[0].slice()); }
+    return points;
+  }
+
+  function ring(arcs) {
+    var points = line(arcs);
+    while (points.length < 4) { points.push(points[0].slice()); }
+    return points;
+  }
+
+  function polygon(arcs) {
+    return arcs.map(ring);
+  }
+
+  function geometry(o) {
+    var type = o.type, coordinates;
+    switch (type) {
+      case "GeometryCollection": return {type: type, geometries: o.geometries.map(geometry)};
+      case "Point": coordinates = point(o.coordinates); break;
+      case "MultiPoint": coordinates = o.coordinates.map(point); break;
+      case "LineString": coordinates = line(o.arcs); break;
+      case "MultiLineString": coordinates = o.arcs.map(line); break;
+      case "Polygon": coordinates = polygon(o.arcs); break;
+      case "MultiPolygon": coordinates = o.arcs.map(polygon); break;
+      default: return null;
+    }
+    return {type: type, coordinates: coordinates};
+  }
+
+  return geometry(o);
+}
+
+var stitch = function(topology, arcs) {
+  var stitchedArcs = {},
+      fragmentByStart = {},
+      fragmentByEnd = {},
+      fragments = [],
+      emptyIndex = -1;
+
+  // Stitch empty arcs first, since they may be subsumed by other arcs.
+  arcs.forEach(function(i, j) {
+    var arc = topology.arcs[i < 0 ? ~i : i], t;
+    if (arc.length < 3 && !arc[1][0] && !arc[1][1]) {
+      t = arcs[++emptyIndex], arcs[emptyIndex] = i, arcs[j] = t;
+    }
+  });
+
+  arcs.forEach(function(i) {
+    var e = ends(i),
+        start = e[0],
+        end = e[1],
+        f, g;
+
+    if (f = fragmentByEnd[start]) {
+      delete fragmentByEnd[f.end];
+      f.push(i);
+      f.end = end;
+      if (g = fragmentByStart[end]) {
+        delete fragmentByStart[g.start];
+        var fg = g === f ? f : f.concat(g);
+        fragmentByStart[fg.start = f.start] = fragmentByEnd[fg.end = g.end] = fg;
+      } else {
+        fragmentByStart[f.start] = fragmentByEnd[f.end] = f;
+      }
+    } else if (f = fragmentByStart[end]) {
+      delete fragmentByStart[f.start];
+      f.unshift(i);
+      f.start = start;
+      if (g = fragmentByEnd[start]) {
+        delete fragmentByEnd[g.end];
+        var gf = g === f ? f : g.concat(f);
+        fragmentByStart[gf.start = g.start] = fragmentByEnd[gf.end = f.end] = gf;
+      } else {
+        fragmentByStart[f.start] = fragmentByEnd[f.end] = f;
+      }
+    } else {
+      f = [i];
+      fragmentByStart[f.start = start] = fragmentByEnd[f.end = end] = f;
+    }
+  });
+
+  function ends(i) {
+    var arc = topology.arcs[i < 0 ? ~i : i], p0 = arc[0], p1;
+    if (topology.transform) { p1 = [0, 0], arc.forEach(function(dp) { p1[0] += dp[0], p1[1] += dp[1]; }); }
+    else { p1 = arc[arc.length - 1]; }
+    return i < 0 ? [p1, p0] : [p0, p1];
+  }
+
+  function flush(fragmentByEnd, fragmentByStart) {
+    for (var k in fragmentByEnd) {
+      var f = fragmentByEnd[k];
+      delete fragmentByStart[f.start];
+      delete f.start;
+      delete f.end;
+      f.forEach(function(i) { stitchedArcs[i < 0 ? ~i : i] = 1; });
+      fragments.push(f);
+    }
+  }
+
+  flush(fragmentByEnd, fragmentByStart);
+  flush(fragmentByStart, fragmentByEnd);
+  arcs.forEach(function(i) { if (!stitchedArcs[i < 0 ? ~i : i]) { fragments.push([i]); } });
+
+  return fragments;
+};
+
+function extractArcs(topology, object$$1, filter) {
+  var arcs = [],
+      geomsByArc = [],
+      geom;
+
+  function extract0(i) {
+    var j = i < 0 ? ~i : i;
+    (geomsByArc[j] || (geomsByArc[j] = [])).push({i: i, g: geom});
+  }
+
+  function extract1(arcs) {
+    arcs.forEach(extract0);
+  }
+
+  function extract2(arcs) {
+    arcs.forEach(extract1);
+  }
+
+  function extract3(arcs) {
+    arcs.forEach(extract2);
+  }
+
+  function geometry(o) {
+    switch (geom = o, o.type) {
+      case "GeometryCollection": o.geometries.forEach(geometry); break;
+      case "LineString": extract1(o.arcs); break;
+      case "MultiLineString": case "Polygon": extract2(o.arcs); break;
+      case "MultiPolygon": extract3(o.arcs); break;
+    }
+  }
+
+  geometry(object$$1);
+
+  geomsByArc.forEach(filter == null
+      ? function(geoms) { arcs.push(geoms[0].i); }
+      : function(geoms) { if (filter(geoms[0].g, geoms[geoms.length - 1].g)) { arcs.push(geoms[0].i); } });
+
+  return arcs;
+}
+
+function planarRingArea(ring) {
+  var i = -1, n = ring.length, a, b = ring[n - 1], area = 0;
+  while (++i < n) { a = b, b = ring[i], area += a[0] * b[1] - a[1] * b[0]; }
+  return Math.abs(area); // Note: doubled area!
+}
+
+var bisect = function(a, x) {
+  var lo = 0, hi = a.length;
+  while (lo < hi) {
+    var mid = lo + hi >>> 1;
+    if (a[mid] < x) { lo = mid + 1; }
+    else { hi = mid; }
+  }
+  return lo;
+};
 
 L.VectorGrid.Slicer = L.VectorGrid.extend({
 
-	options: {
-		vectorTileLayerName: 'sliced',
-		extent: 4096,	// Default for geojson-vt
-		maxZoom: 14  	// Default for geojson-vt
-	},
+  options: {
+    vectorTileLayerName: 'sliced',
+    extent: 4096,  // Default for geojson-vt
+    maxZoom: 14    // Default for geojson-vt
+  },
 
-	initialize: function(geojson, options) {
-		L.VectorGrid.prototype.initialize.call(this, options);
+  cachedOptions: {},
+  slicers: {},
 
-		// Create a shallow copy of this.options, excluding things that might
-		// be functions - we only care about topojson/geojsonvt options
-		var options = {};
-		for (var i in this.options) {
-			if (i !== 'rendererFactory' &&
-				i !== 'vectorTileLayerStyles' &&
-				typeof (this.options[i]) !== 'function'
-			) {
-				options[i] = this.options[i];
-			}
-		}
+  initialize: function(geojson, options) {
+    var this$1 = this;
 
-// 		this._worker = new Worker(window.URL.createObjectURL(new Blob([workerCode])));
-		this._worker = new Worker(workerCode);
+    L.VectorGrid.prototype.initialize.call(this, options);
 
-		// Send initial data to worker.
-		this._worker.postMessage(['slice', geojson, options]);
+    // Create a shallow copy of this.options, excluding things that might
+    // be functions - we only care about topojson/geojsonvt options
+    for (var i in this.options) {
+      if (i !== 'rendererFactory' &&
+        i !== 'vectorTileLayerStyles' &&
+        typeof (this$1.options[i]) !== 'function'
+      ) {
+        this$1.cachedOptions[i] = this$1.options[i];
+      }
+    }
 
-	},
+    // Given a blob of GeoJSON and some topojson/geojson-vt options, configure slicers.
+    if (geojson.type && geojson.type === 'Topology') {
+      for (var layerName in geojson.objects) {
+        this$1.slicers[layerName] = index$7(
+          feature$2(geojson, geojson.objects[layerName])
+        , options);
+      }
+    } else {
+      this.slicers[options.vectorTileLayerName] = index$7(geojson, options);
+    }
 
+  },
 
-	_getVectorTilePromise: function(coords) {
+  _getVectorTilePromise: function(coords) {
+    var _this = this;
 
-		var _this = this;
+    var p = new Promise( function (res) {
+      var tileLayers = {};
+      for (var layerName in _this.slicers) {
+        var slicedTileLayer = _this.slicers[layerName].getTile(coords.z, coords.x, coords.y);
 
-		var p = new Promise( function waitForWorker(res) {
-			_this._worker.addEventListener('message', function recv(m) {
-				if (m.data.coords &&
-				    m.data.coords.x === coords.x &&
-				    m.data.coords.y === coords.y &&
-				    m.data.coords.z === coords.z ) {
+        if (slicedTileLayer) {
+          var vectorTileLayer = {
+            features: [],
+            extent: _this.cachedOptions.extent,
+            name: _this.cachedOptions.vectorTileLayerName,
+            length: slicedTileLayer.features.length
+          };
 
-					res(m.data);
-					_this._worker.removeEventListener('message', recv);
-				}
-			});
-		});
-
-		this._worker.postMessage(['get', coords]);
-
-		return p;
-	},
+          for (var i in slicedTileLayer.features) {
+            var feat = {
+              geometry: slicedTileLayer.features[i].geometry,
+              properties: slicedTileLayer.features[i].tags,
+              type: slicedTileLayer.features[i].type  // 1 = point, 2 = line, 3 = polygon
+            };
+            vectorTileLayer.features.push(feat);
+          }
+          tileLayers[layerName] = vectorTileLayer;
+        }
+      }
+      var data = { layers: tileLayers, coords: coords };
+      res(data);
+    });
+    return p;
+  },
 
 });
 
 
 L.vectorGrid.slicer = function (geojson, options) {
-	return new L.VectorGrid.Slicer(geojson, options);
+  return new L.VectorGrid.Slicer(geojson, options);
 };
 
 L.Canvas.Tile = L.Canvas.extend({
@@ -1801,11 +2924,13 @@ L.Canvas.Tile = L.Canvas.extend({
 	},
 
 	_onClick: function (e) {
+		var this$1 = this;
+
 		var point = this._map.mouseEventToLayerPoint(e).subtract(this.getOffset()), layers = [], layer;
 
 		for (var id in this._layers) {
-			layer = this._layers[id];
-			if (layer.options.interactive && layer._containsPoint(point) && !this._map._draggableMoved(layer)) {
+			layer = this$1._layers[id];
+			if (layer.options.interactive && layer._containsPoint(point) && !this$1._map._draggableMoved(layer)) {
 				L.DomEvent._fakeStop(e);
 				layers.push(layer);
 			}
